@@ -128,6 +128,11 @@ let rec eval (e : exp) (r : evT env) : evT = match e with
     | Fold(funz,d) -> (match d with
                       Dict(l1) -> apply funz l1 (Int(0)) r
                       | _ -> failwith("Fold not used on a dict")) 
+    
+    | Filter(kl,d) -> (match eval d r with
+                       Dictvalues(l1) -> Dictvalues(filter kl l1)
+                       | _ -> failwith("Filter not used on a dict"))
+          
 
     
      and evalList (l:dictarg) (amb: evT env) : (ide*evT) list = (match l with
@@ -162,9 +167,20 @@ let rec eval (e : exp) (r : evT env) : evT = match e with
                                                    in ( match (a,value) with
                                                    ((Int(u),Int(v))) -> apply funct ls (Int(u+v)) amb
                                                    |_->failwith("Error apply"))
-                                 |_ -> failwith("Not a dict"));;
+                                 |_ -> failwith("Not a dict"))
                             
-    
+    and filter (kl:string list) (l:(ide*evT) list) : (ide*evT) list = (match l with
+                              
+                                  [] -> [] 
+                                  |(id,x)::xs ->  if (empty kl) then []
+                                                  else if (List.mem id kl) then (id,x)::filter kl xs
+                                                  else filter kl xs)
+    and empty (l:string list) : bool= (match l with
+                                      [] -> true
+                                     | _ -> false);;
+
+                                      
+
 
 
 (*)                TEST            *)
@@ -180,3 +196,5 @@ eval (Has_key("p1",(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Empty)))))) (emptye
 eval (Iterate(Fun("y", Sum(Den "y", Eint 100)),(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Empty)))))) (emptyenv Unbound);;
 
 eval (Fold(Fun("y", Sum(Den "y", Eint 100)),(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Empty)))))) (emptyenv Unbound);;
+
+eval (Filter(["p1"],(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Val("p2",Eint(30),Empty))))))) (emptyenv Unbound);;
