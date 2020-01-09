@@ -10,7 +10,7 @@ type exp = Eint of int | Ebool of bool | Den of ide | Prod of exp * exp | Sum of
   | Has_key of ide * exp
   | Iterate of exp * exp
   | Fold of exp * exp
-  | Filter of ide list * exp
+  | Filter of (ide list) * exp
   and dictarg = Empty | Val of ide * exp * dictarg;;
 
 (*ambiente polimorfo*)
@@ -20,19 +20,19 @@ let applyenv (r : 't env) (i : ide) = r i;;
 let bind (r : 't env) (i : ide) (v : 't) = function x -> if x = i then v else applyenv r x;;
 
 (*tipi esprimibili*)
-type evT = Int of int | Bool of bool | Unbound | FunVal of evFun | RecFunVal of ide * evFun | Dictvalues of (ide * evT) list
+type evT = Int of int | Bool of bool | String of string | Unbound | FunVal of evFun | RecFunVal of ide * evFun | Dictvalues of (ide * evT) list
 and evFun = ide * exp * evT env
 
 (*rts*)
 (*type checking*)
 let typecheck (s : string) (v : evT) : bool = match s with
 	"int" -> (match v with
-		Int(_) -> true |
-		_ -> false) |
-	"bool" -> (match v with
-		Bool(_) -> true |
-		_ -> false) |
-	_ -> failwith("not a valid type");;
+            Int(_) -> true 
+            | _ -> false) 
+  |	"bool" -> (match v with
+		           Bool(_) -> true 
+               | _ -> false) 
+  | _ -> failwith("not a valid type");;
 
 (*funzioni primitive*)
 let prod x y = if (typecheck "int" x) && (typecheck "int" y)
@@ -112,73 +112,81 @@ let rec eval (e : exp) (r : evT env) : evT = match e with
             	                        	Fun(i, fBody) -> let r1 = (bind r f (RecFunVal(f, (i, fBody, r)))) in
                                                eval letBody r1 
                                         |_ -> failwith("non functional def"))
-    | Dict(l) -> Dictvalues(evalList l r)
+    | Dict(l) -> Dictvalues(evalList l r [])
     | Insert(id,e1,d) -> (match eval d r with
                          Dictvalues(l1) -> let evalue = eval e1 r in Dictvalues(insert l1 id evalue)
-                        | _ -> failwith("Insert non used on a dict"))
+                        | _ -> failwith("Insert not used on a dict"))
     | Delete(d,id) -> (match eval d r with
-                      Dictvalues(l1) -> Dictvalues(delete l1 id false)
+                      Dictvalues(l1) -> (match haskey l1 id with 
+                                        Bool true -> Dictvalues(delete l1 id)
+                                        |Bool false -> failwith ("Non esiste la chiave nel dizionario --> Non posso eliminarla!"))
                       | _ -> failwith("delete not used on a dict")) 
     | Has_key(id,d) -> (match eval d r with
                        Dictvalues(l1) -> haskey l1 id
                        | _ -> failwith("HasKey not used on a dict")) 
-    | Iterate(funz,d) -> (match d with
-                         Dict(l1) -> Dictvalues(apl funz l1 r)
+    | Iterate(funz,d) -> (let x=eval d r in 
+                         match d with
+                         Dict(l1) -> Dictvalues(iterate funz l1 r)
                          | _ -> failwith("Iterate not used on a dict")) 
-    | Fold(funz,d) -> (match d with
-                      Dict(l1) -> apply funz l1 (Int(0)) r
+    | Fold(funz,d) -> (let x=eval d r in 
+                       match d with
+                       Dict(l1) -> fold funz l1 (Int(0)) r
                       | _ -> failwith("Fold not used on a dict")) 
-    
+     
     | Filter(kl,d) -> (match eval d r with
                        Dictvalues(l1) -> Dictvalues(filter kl l1)
                        | _ -> failwith("Filter not used on a dict"))
           
 
     
-     and evalList (l:dictarg) (amb: evT env) : (ide*evT) list = (match l with
-                          Empty -> []
+     and evalList (l:dictarg) (amb: evT env) (a:(ide*evT) list) : (ide*evT) list = (match l with
+                          Empty -> a
                           | Val(id,e,ls) -> let evalue = eval e amb
-                                            in (id,evalue)::(evalList ls amb)
+                                            in (evalList ls amb (match haskey a id with
+                                                             Bool false -> (id,evalue)::a 
+                                                             |Bool true -> failwith("Ci sono chiavi duplicate!")
+                                                ))
                           | _ -> failwith("Not a dict"))
                              
-     and insert (l:(ide*evT) list) (id1:string) (value:evT) : (ide*evT) list= l @ [(id1,value)]
+     and insert (l:(ide*evT) list) (id1:string) (value:evT) : (ide*evT) list= 
+                          (match haskey l id1 with 
+                           Bool true -> failwith("Insert errato -> Esiste gia' la chiave nel dizionario")
+                           |Bool false -> l @ [(id1,value)])
                           
   
-     and delete (l:(ide*evT) list) (id1:string) (a:bool) : (ide*evT) list =
-                          ( match (l,a) with
-                           ([],_) -> []
-                         | (((id,x)::xs),bl) -> if ((id=id1) && bl == false) then delete xs id1 true
-                                         else (id,x)::delete xs id1 bl)
+     and delete (l:(ide*evT) list) (id1:string) : (ide*evT) list =
+                          ( match l with
+                           [] -> []
+                         | ((id,x)::xs) -> if id=id1 then delete xs id1 
+                                                else (delete xs id1)@[(id,x)] )
                  
      and haskey (l:(ide*evT) list) (id1:string) : evT  = (match l with
                          [] -> Bool false
                        | (id,x)::xs -> if id1=id then Bool true
                                        else haskey xs id1) 
      
-     and apl (funct:exp) (l1:dictarg) (amb:evT env) : (ide*evT) list = (match l1 with
+     and iterate (funct:exp) (l1:dictarg) (amb:evT env) : (ide*evT) list = (match l1 with
                          Empty -> []
                          | Val(id,e,ls) -> let value = eval (FunCall(funct,e)) amb
-                                          in (id,value) :: apl funct ls amb 
+                                          in (id,value) :: iterate funct ls amb 
                          |_ -> failwith("Not a dict"))
                      
-     and apply (funct:exp) (l1:dictarg) (a:evT) (amb:evT env)  : evT  = (match l1 with
+     and fold (funct:exp) (l1:dictarg) (a:evT) (amb:evT env)  : evT  = (match l1 with
                                  Empty -> a
                                  | Val(id,e,ls) -> let value = eval (FunCall(funct,e)) amb
                                                    in ( match (a,value) with
-                                                   ((Int(u),Int(v))) -> apply funct ls (Int(u+v)) amb
-                                                   |_->failwith("Error apply"))
+                                                   ((Int(u),Int(v))) -> fold funct ls (Int(u+v)) amb
+                                                   |_->failwith("Error fold"))
                                  |_ -> failwith("Not a dict"))
                             
     and filter (kl:string list) (l:(ide*evT) list) : (ide*evT) list = (match l with
-                              
                                   [] -> [] 
                                   |(id,x)::xs ->  if (empty kl) then []
-                                                  else if (List.mem id kl) then (id,x)::filter kl xs
+                                                  else if (List.mem id kl) then (filter kl xs)@[(id,x)]
                                                   else filter kl xs)
     and empty (l:string list) : bool= (match l with
                                       [] -> true
                                      | _ -> false);;
-
                                       
 
 
@@ -189,12 +197,12 @@ eval (Dict(Val("p1",Eint(10),Val("p2",Eint(20),Empty)))) (emptyenv Unbound);;
 
 eval (Insert("p3",Eint(30),(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Empty)))))) (emptyenv Unbound);;
 
-eval (Delete((Dict(Val("p1",Eint(10),Val("p2",Eint(20),Val("p2",Eint(30),Empty))))),"p2")) (emptyenv Unbound);;
+eval (Delete((Dict(Val("p1",Eint(10),Val("p2",Eint(20),Val("p3",Eint(30),Empty))))),"p2")) (emptyenv Unbound);;
 
 eval (Has_key("p1",(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Empty)))))) (emptyenv Unbound);;
 
-eval (Iterate(Fun("y", Sum(Den "y", Eint 100)),(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Empty)))))) (emptyenv Unbound);;
+eval (Iterate(Fun("y", Prod(Den "y", Eint 50)),(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Val("p3",Eint(30),Empty))))))) (emptyenv Unbound);;
 
-eval (Fold(Fun("y", Sum(Den "y", Eint 100)),(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Empty)))))) (emptyenv Unbound);;
+eval (Fold(Fun("y", Sum(Den "y", Eint 100)),(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Val("p3",Eint(30),Empty))))))) (emptyenv Unbound);;
 
-eval (Filter(["p1"],(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Val("p2",Eint(30),Empty))))))) (emptyenv Unbound);;
+eval (Filter(["p1";"p2";"p3"],(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Val("p3",Eint(30),Empty))))))) (emptyenv Unbound);;
