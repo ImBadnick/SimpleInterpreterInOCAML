@@ -11,6 +11,8 @@ type exp = Eint of int | Ebool of bool | Den of ide | Prod of exp * exp | Sum of
   | Iterate of exp * exp
   | Fold of exp * exp
   | Filter of (ide list) * exp
+  | FunAcc of ide * ide * exp
+  | FunCallAcc of exp * exp * exp
   and dictarg = Empty | Val of ide * exp * dictarg;;
 
 (*ambiente polimorfo*)
@@ -21,7 +23,9 @@ let bind (r : 't env) (i : ide) (v : 't) = function x -> if x = i then v else ap
 
 (*tipi esprimibili*)
 type evT = Int of int | Bool of bool | String of string | Unbound | FunVal of evFun | RecFunVal of ide * evFun | Dictvalues of (ide * evT) list
-and evFun = ide * exp * evT env
+           | FunValAcc of evFunAcc
+and evFunAcc= ide * ide * exp * evT env
+and evFun = ide * exp * evT env;;
 
 (*rts*)
 (*type checking*)
@@ -100,6 +104,7 @@ let rec eval (e : exp) (r : evT env) : evT = match e with
                               else failwith ("nonboolean guard")
     | Let(i, e1, e2) -> eval e2 (bind r i (eval e1 r)) 
     | Fun(i, a) -> FunVal(i, a, r) 
+    | FunAcc(acc,i,a) -> FunValAcc(acc,i,a,r)   (*  Funzione che prende 2 parametri, usata per il fold  *)
     | FunCall(f, eArg) -> let fClosure = (eval f r) in
 			                        (match fClosure with
                                    FunVal(arg, fBody, fDecEnv) -> eval fBody (bind fDecEnv arg (eval eArg r))
@@ -108,6 +113,10 @@ let rec eval (e : exp) (r : evT env) : evT = match e with
 				                                                          			let aEnv = (bind rEnv arg aVal) in
                                                                           eval fBody aEnv
                                | _ -> failwith("non functional value")) 
+    | FunCallAcc(f,eAcc,eArg) -> let fclosure = (eval f r) in (*Chiamata di una funzione con 2 parametri*)
+                                 (match fclosure with
+                                    FunValAcc(acc,arg,fBody,fDecEnv) -> let newenv= bind fDecEnv arg (eval eArg r)
+                                                                        in eval fBody (bind newenv acc (eval eAcc r)))
     | Letrec(f, funDef, letBody) ->  (match funDef with
             	                        	Fun(i, fBody) -> let r1 = (bind r f (RecFunVal(f, (i, fBody, r)))) in
                                                eval letBody r1 
@@ -130,7 +139,7 @@ let rec eval (e : exp) (r : evT env) : evT = match e with
                          | _ -> failwith("Iterate not used on a dict")) 
     | Fold(funz,d) -> (let x=eval d r in 
                        match d with
-                       Dict(l1) -> fold funz l1 (Int(0)) r
+                       Dict(l1) -> fold funz l1 (Int(1)) r
                       | _ -> failwith("Fold not used on a dict")) 
      
     | Filter(kl,d) -> (match eval d r with
@@ -143,7 +152,7 @@ let rec eval (e : exp) (r : evT env) : evT = match e with
                           Empty -> a
                           | Val(id,e,ls) -> let evalue = eval e amb
                                             in (evalList ls amb (match haskey a id with
-                                                             Bool false -> (id,evalue)::a 
+                                                             Bool false -> a@[(id,evalue)]
                                                              |Bool true -> failwith("Ci sono chiavi duplicate!")
                                                 ))
                           | _ -> failwith("Not a dict"))
@@ -173,11 +182,10 @@ let rec eval (e : exp) (r : evT env) : evT = match e with
                      
      and fold (funct:exp) (l1:dictarg) (a:evT) (amb:evT env)  : evT  = (match l1 with
                                  Empty -> a
-                                 | Val(id,e,ls) -> let value = eval (FunCall(funct,e)) amb
-                                                   in ( match (a,value) with
-                                                   ((Int(u),Int(v))) -> fold funct ls (Int(u+v)) amb
-                                                   |_->failwith("Error fold"))
-                                 |_ -> failwith("Not a dict"))
+                                 | Val(id,e,ls) -> (match a with 
+                                                    Int(u) -> fold funct ls (eval (FunCallAcc(funct,(Eint(u)),e)) amb) amb
+                                                   | _ -> failwith("Error in fold operation"))
+                                 | _ -> failwith("Not a dict"))
                             
     and filter (kl:string list) (l:(ide*evT) list) : (ide*evT) list = (match l with
                                   [] -> [] 
@@ -201,8 +209,8 @@ eval (Delete((Dict(Val("p1",Eint(10),Val("p2",Eint(20),Val("p3",Eint(30),Empty))
 
 eval (Has_key("p1",(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Empty)))))) (emptyenv Unbound);;
 
-eval (Iterate(Fun("y", Prod(Den "y", Eint 50)),(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Val("p3",Eint(30),Empty))))))) (emptyenv Unbound);;
+eval (Iterate(Fun("y", Sum(Den "y", Eint 101)),(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Val("p3",Eint(30),Empty))))))) (emptyenv Unbound);;
 
-eval (Fold(Fun("y", Sum(Den "y", Eint 100)),(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Val("p3",Eint(30),Empty))))))) (emptyenv Unbound);;
+eval (Fold(FunAcc("acc","y",Sum(Den "acc",Sum(Den "y", Eint 5))),(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Val("p3",Eint(30),Empty))))))) (emptyenv Unbound);;
 
 eval (Filter(["p1";"p2";"p3"],(Dict(Val("p1",Eint(10),Val("p2",Eint(20),Val("p3",Eint(30),Empty))))))) (emptyenv Unbound);;
