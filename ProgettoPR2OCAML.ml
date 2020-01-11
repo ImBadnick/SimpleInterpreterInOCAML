@@ -1,3 +1,10 @@
+(*
+Author: Lorenzo Massagli
+Date: 2020
+Project: Progetto intermedio seconda parte del corso di PR2 (Università di Pisa).
+Title: Estensione dell'interprete didattico in OCAML con dizionari e operazioni corrispondenti.
+*)
+
 type ide = string;;
 
 type exp = Eint of int | Ebool of bool | Den of ide | Prod of exp * exp | Sum of exp * exp | Diff of exp * exp |

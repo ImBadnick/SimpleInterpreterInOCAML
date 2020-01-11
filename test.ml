@@ -1,3 +1,10 @@
+(*
+Author: Lorenzo Massagli
+Date: 2020
+Project: Progetto intermedio seconda parte del corso di PR2 (Università di Pisa).
+Title: Estensione dell'interprete didattico in OCAML con dizionari e operazioni corrispondenti.
+*)
+
 (*                TEST            *)
 
 (*                TEST EVAL DIZIONARIO                 *)
