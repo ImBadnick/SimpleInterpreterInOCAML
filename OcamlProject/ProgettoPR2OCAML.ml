@@ -30,7 +30,8 @@ let applyenv (r : 't env) (i : ide) = r i;;
 let bind (r : 't env) (i : ide) (v : 't) = function x -> if x = i then v else applyenv r x;;
 
 (*tipi esprimibili*)
-type evT = Int of int | Bool of bool | String of string | Unbound | FunVal of evFun | RecFunVal of ide * evFun | Dictvalues of (ide * evT) list
+type evT = Int of int | Bool of bool | Unbound | FunVal of evFun | RecFunVal of ide * evFun 
+           | Dictvalues of (ide * evT) list
            | FunValAcc of evFunAcc (*Closure of a function that gets an accomulator*)
 and evFunAcc= ide * ide * exp * evT env (*Closure of a function that gets an accomulator*)
 and evFun = ide * exp * evT env;;
@@ -44,18 +45,28 @@ let rec typecheck (s : string) (v : evT) : bool = match s with
   |	"bool" -> (match v with
 		           Bool(_) -> true 
                | _ -> false) 
-  
+  | "unbound" -> (match v with
+                Unbound -> true
+                |_ -> false)
+  | "funval" -> (match v with
+                FunVal(_) -> true
+                | _ -> false)
+  | "recfunval" -> (match v with
+                    RecFunVal(_) -> true
+                    | _ -> false)
+  | "funvalacc" -> (match v with
+                     FunValAcc(_) -> true
+                     | _ -> false)
   (*Dynamic typecheck of dict --> Controls if all the elements of the dict passed as parameter have the same type*)
   | "Dictvalues" -> (match v with
-                     Dictvalues(l) -> match l with 
+                     Dictvalues(l) -> (match l with 
                                       [] -> true
                                       |(id,x)::xs -> if (typecheck "int" x) then typec "int" xs
                                                     else typec "bool" xs
-                                      |_ -> failwith("typecheck error")
+                                      |_ -> failwith("typecheck error"))
                      |_ -> false
                      )
   | _ -> failwith("not a valid type")
- 
   and typec (tp: string) (l:(ide * evT) list) : bool = 
       (match l with
       [] -> true
@@ -135,7 +146,7 @@ let rec eval (e : exp) (r : evT env) : evT = match e with
                                                                     	let rEnv = (bind fDecEnv g fClosure) in
 				                                                          			let aEnv = (bind rEnv arg aVal) in
                                                                           eval fBody aEnv
-                               | _ -> failwith("non functional value")) 
+                                 | _ -> failwith("non functional value")) 
     | FunCallAcc(f,eAcc,eArg) -> let fclosure = (eval f r) in (*Chiamata di una funzione con 2 parametri*)
                                  (match fclosure with
                                     FunValAcc(acc,arg,fBody,fDecEnv) -> let newenv= bind fDecEnv arg (eval eArg r)
@@ -192,7 +203,7 @@ let rec eval (e : exp) (r : evT env) : evT = match e with
                                                              Bool false -> a@[(id,evalue)]
                                                              |Bool true -> failwith("Ci sono chiavi duplicate!")
                                                 ))
-                          | _ -> failwith("Not a dict"))
+                          | _ -> failwith("Not a dict value"))
                              
      (*Function that inserts an element at the end of the dict!*)
      and insert (l:(ide*evT) list) (id1:string) (value:evT) : (ide*evT) list= 
@@ -216,12 +227,12 @@ let rec eval (e : exp) (r : evT env) : evT = match e with
      (*Function that applies the function passed as parameter to all the elements of the dict*)
      and iterate (funct:exp) (l1:(ide*evT) list) (amb:evT env) : (ide*evT) list = (match l1 with
                           [] -> []  
-                         | (id,x)::xs -> match x with
+                         | (id,x)::xs -> (match x with
                                            Int(u) ->let value = eval (FunCall(funct,Eint(u))) amb 
                                                     in (id,value) :: iterate funct xs amb 
                                            |Bool(w) ->let value = eval (FunCall(funct,Ebool(w))) amb 
                                                      in (id,value) :: iterate funct xs amb 
-                                           |_ -> failwith("Error in iterate operation")
+                                           |_ -> failwith("Error in iterate operation"))
                          |_ -> failwith("Not a dict"))
              
      (*Function that does the fold*)
@@ -230,8 +241,6 @@ let rec eval (e : exp) (r : evT env) : evT = match e with
                                  | (id,x)::xs -> (match (a,x) with 
                                                   ((Int(u)),(Int(w))) -> fold funct xs (eval (FunCallAcc(funct,(Eint(u)),Eint(w))) amb) amb
                                                   |((Bool(u)),(Bool(w))) -> fold funct xs (eval (FunCallAcc(funct,(Ebool(u)),Ebool(w))) amb) amb
-                                                  |((Bool(u)),(Int(w))) -> fold funct xs (eval (FunCallAcc(funct,(Ebool(u)),Eint(w))) amb) amb
-                                                  |((Int(u)),(Bool(w))) -> fold funct xs (eval (FunCallAcc(funct,(Eint(u)),Ebool(w))) amb) amb 
                                                   | _ -> failwith ("Error in fold operation"))
                                  | _ -> failwith("Not a dict"))
      (*Function that filters the elements of the dict -> Eliminates the elements that are not in the list passed as parameter*)                 

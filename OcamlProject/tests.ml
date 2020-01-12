@@ -141,3 +141,8 @@ typecheck "Dictvalues" (eval (Dict(Val("p1",Ebool(true),Val("p2",Eint(10),Empty)
 typecheck "Dictvalues" (eval (Dict(Val("p1",Eint(10),Val("p2",Eint(10),Empty)))) (emptyenv Unbound));;
 
 typecheck "Dictvalues" (eval (Dict(Val("p1",Ebool(false),Val("p2",Ebool(true),Empty)))) (emptyenv Unbound));;
+
+typecheck "prova" (eval (Dict(Val("p1",Eint(10),Val("p2",Eint(10),Empty)))) (emptyenv Unbound));;
+
+typecheck "funval" (FunVal("p1", (Sum(Den "p1", Eint 10)), (bind (emptyenv Unbound) "p1" (Int(10)))));;
+
