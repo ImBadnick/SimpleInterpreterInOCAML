@@ -1,8 +1,7 @@
 (*
 Author: Lorenzo Massagli
 Date: 2020
-Project: Progetto intermedio seconda parte del corso di PR2 (Università di Pisa).
-Title: Estensione dell'interprete didattico in OCAML con dizionari e operazioni corrispondenti.
+Project: OCAML INTERPRETER
 *)
 
 type ide = string;;
@@ -23,13 +22,13 @@ type exp = Eint of int | Ebool of bool | Den of ide | Prod of exp * exp | Sum of
   | FunCallAcc of exp * exp * exp (*Extends binary functions*)
   and dictarg = Empty | Val of ide * exp * dictarg;;
 
-(*ambiente polimorfo*)
+(*polymorph enviroment*)
 type 't env = ide -> 't;;
 let emptyenv (v : 't) = function x -> v;;
 let applyenv (r : 't env) (i : ide) = r i;;
 let bind (r : 't env) (i : ide) (v : 't) = function x -> if x = i then v else applyenv r x;;
 
-(*tipi esprimibili*)
+(*types*)
 type evT = Int of int | Bool of bool | Unbound | FunVal of evFun | RecFunVal of ide * evFun
            | Dictvalues of (ide * evT) list
            | FunValAcc of evFunAcc (*Closure of a function that gets an accomulator*)
@@ -72,7 +71,7 @@ let rec typecheck (s : string) (v : evT) : bool = match s with
       [] -> true
       | (id,x)::xs -> (typecheck tp x) && (typec tp xs));;
 
-(*funzioni primitive*)
+(*primitive functions*)
 let prod x y = if (typecheck "int" x) && (typecheck "int" y)
 	then (match (x,y) with
 		(Int(n),Int(u)) -> Int(n*u))
@@ -119,7 +118,7 @@ let non x = if (typecheck "bool" x)
 		Bool(false) -> Bool(true))
 	else failwith("Type error");;
 
-(*interprete*)
+(*interpreter*)
 let rec eval (e : exp) (r : evT env) : evT = match e with
       Eint n -> Int n
     | Ebool b -> Bool b
